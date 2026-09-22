@@ -3,197 +3,137 @@ import pandas as pd
 import sqlite3
 import datetime
 
-
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="Gestion ELGET SARL", layout="wide")
-
-# --- CONNEXION BASE DE DONNÉES LOCALES (PERSISTANTE) ---
-DB_FILE = "elget_sarl.db"
-
-def get_connection():
-    return sqlite3.connect(DB_FILE, check_same_thread=False)
-
-def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    # Table Carburant
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS carburant (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT,
-            vehicule TEXT,
-            chauffeur TEXT,
-            litres REAL,
-            cout_total REAL,
-            station TEXT,
-            kms_compteur REAL
-        )
-    """)
-    
-    # Table Inspections (Camions, Remorques, Pneus)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS inspections (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT,
-            immatriculation TEXT,
-            type_element TEXT, -- Camion, Remorque, Pneu
-            inspecteur TEXT,
-            etat_general TEXT,
-            pression_pneus_psi REAL,
-            remarques TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
-
-# --- FONCTIONS DE CHARGEMENT & ET D'INSERTION ---
-def charger_donnees(table_name):
-    conn = get_connection()
-    df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-    conn.close()
-    return df
-
-def inserer_carburant(date, vehicule, chauffeur, litres, cout, station, kms):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO carburant (date, vehicule, chauffeur, litres, cout_total, station, kms_compteur)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (str(date), vehicule, chauffeur, litres, cout, station, kms))
-    conn.commit()
-    conn.close()
-
-def inserer_inspection(date, immatriculation, type_element, inspecteur, etat, pression, remarques):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO inspections (date, immatriculation, type_element, inspecteur, etat_general, pression_pneus_psi, remarques)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (str(date), immatriculation, type_element, inspecteur, etat, pression, remarques))
-    conn.commit()
-    conn.close()
-
-def importer_excel_vers_db(uploaded_file, table_name):
-    """Importation initiale de fichiers Excel vers SQLite"""
-    try:
-        df = pd.read_excel(uploaded_file)
-        conn = get_connection()
-        df.to_sql(table_name, conn, if_exists='append', index=False)
-        conn.close()
-        st.success(f"Données importées avec succès dans la table '{table_name}' !")
-    except Exception as e:
-        st.error(f"Erreur lors de l'importation : {e}")
-
-# --- INTERFACE UTILISATEUR (STREAMLIT) ---
-st.title("🚛 Système de Gestion ELGET SARL")
-
-menu = st.sidebar.selectbox(
-    "Navigation", 
-    ["Tableau de bord / Analyses", "Gestion Carburant", "Inspections Pneus & Véhicules", "Importation Excel"]
+st.set_page_config(
+    page_title="ELGET SARL - Flotte, Carburant & Analyses",
+    page_icon="🚚",
+    layout="wide"
 )
 
-# 1. IMPORTATION DES FICHIERS EXCEL EXISTANTS
-if menu == "Importation Excel":
-    st.header("📥 Charger vos fichiers Excel existants")
-    st.write("Les données chargées seront sauvegardées de manière permanente dans la base de données de l'application.")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Carburant")
-        file_carburant = st.file_uploader("Fichier Gestion_Carburant_ELGET_SARL.xlsx", type=["xlsx"], key="carb")
-        if file_carburant and st.button("Importer Carburant"):
-            importer_excel_vers_db(file_carburant, "carburant")
-            
-    with col2:
-        st.subheader("Inspections & Pneus")
-        file_inspection = st.file_uploader("Fichier Inspection_Camion_Remorque_Pneus_ELGET_SARL.xlsx", type=["xlsx"], key="insp")
-        if file_inspection and st.button("Importer Inspections"):
-            importer_excel_vers_db(file_inspection, "inspections")
+st.markdown("""
+    <style>
+    .stApp { background-color: #f8fafc; }
+    .brand-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        padding: 24px;
+        border-radius: 16px;
+        color: white;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+    .brand-header h1 { margin: 0; font-size: 28px; font-weight: 800; }
+    </style>
+""", unsafe_allow_html=True)
 
-# 2. GESTION DU CARBURANT (Saisie)
-elif menu == "Gestion Carburant":
-    st.header("⛽ Saisie & Historique Carburant")
+# --- FONCTION DE LECTURE EXCEL UNIVERSELLE & ANTIFRAGILE ---
+def lire_fichier_universel(uploaded_file):
+    filename = uploaded_file.name.lower()
     
-    with st.expander("➕ Ajouter un plein de carburant"):
-        with st.form("form_carburant"):
-            col1, col2, col3 = st.columns(3)
-            date_c = col1.date_input("Date", datetime.date.today())
-            vehicule = col2.text_input("Véhicule / Immatriculation")
-            chauffeur = col3.text_input("Chauffeur")
+    # 1. Traitement des fichiers CSV
+    if filename.endswith('.csv'):
+        try:
+            return pd.read_csv(uploaded_file)
+        except Exception:
+            uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file, sep=';')
             
-            col4, col5, col6 = st.columns(3)
-            litres = col4.number_input("Litres", min_value=0.0)
-            cout = col5.number_input("Coût total ($)", min_value=0.0)
-            station = col6.text_input("Station / Fournisseur")
-            kms = st.number_input("Kilométrage Compteur", min_value=0.0)
-            
-            submit = st.form_submit_button("Enregistrer")
-            if submit:
-                inserer_carburant(date_c, vehicule, chauffeur, litres, cout, station, kms)
-                st.success("Enregistrement carburant sauvegardé avec succès !")
-                st.rerun()
-
-    st.subheader("📊 Données Carburant enregistrées")
-    df_carb = charger_donnees("carburant")
-    st.dataframe(df_carb, use_container_width=True)
-
-# 3. INSPECTIONS (Saisie)
-elif menu == "Inspections Pneus & Véhicules":
-    st.header("🔍 Saisie & Historique des Inspections")
+    # 2. Traitement des fichiers Excel (.xlsx, .xls) avec moteurs multiples
+    engines = ['openpyxl', 'xlrd', 'pyxlsb', None]
     
-    with st.expander("➕ Ajouter une nouvelle inspection"):
-        with st.form("form_inspection"):
-            col1, col2, col3 = st.columns(3)
-            date_i = col1.date_input("Date Inspection", datetime.date.today())
-            immatriculation = col2.text_input("Immatriculation")
-            type_element = col3.selectbox("Élément inspecté", ["Camion", "Remorque", "Pneu"])
+    for engine in engines:
+        try:
+            uploaded_file.seek(0)
+            if engine:
+                xls = pd.ExcelFile(uploaded_file, engine=engine)
+            else:
+                xls = pd.ExcelFile(uploaded_file)
+                
+            sheets = xls.sheet_names
+            sheet_target = sheets[0]
             
-            col4, col5 = st.columns(2)
-            inspecteur = col4.text_input("Nom Inspecteur")
-            etat = col5.selectbox("État général", ["Bon", "À réparer", "Critique", "Remplacé"])
+            # Recherche automatique du bon onglet
+            for s in sheets:
+                if any(k in s.lower() for k in ['plein', 'carburant', 'inspection', 'suivi', 'flotte', 'donnees']):
+                    sheet_target = s
+                    break
+                    
+            df_raw = pd.read_excel(xls, sheet_name=sheet_target)
             
-            pression = st.number_input("Pression Pneus (PSI)", min_value=0.0)
-            remarques = st.text_area("Remarques / Anomales détectées")
+            # Détection et saut des lignes de titre décoratives
+            skip = 0
+            for idx, row in df_raw.iterrows():
+                row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).lower()
+                if any(k in row_str for k in ['date', 'plein', 'fiche', 'immat', 'camion', 'chauffeur', 'km']):
+                    skip = idx + 1
+                    break
             
-            submit = st.form_submit_button("Enregistrer Inspection")
-            if submit:
-                inserer_inspection(date_i, immatriculation, type_element, inspecteur, etat, pression, remarques)
-                st.success("Inspection enregistrée avec succès !")
-                st.rerun()
+            uploaded_file.seek(0)
+            if skip > 0:
+                df = pd.read_excel(xls, sheet_name=sheet_target, skiprows=skip, engine=engine).dropna(how='all')
+            else:
+                df = df_raw.dropna(how='all')
+                
+            return df
+        except Exception:
+            continue
 
-    st.subheader("📋 Données Inspections enregistrées")
-    df_insp = charger_donnees("inspections")
-    st.dataframe(df_insp, use_container_width=True)
+    # 3. Mode secours : Fichier HTML / CSV renommé en .xlsx par erreur
+    try:
+        uploaded_file.seek(0)
+        return pd.read_csv(uploaded_file, on_bad_lines='skip', sep=None, engine='python')
+    except Exception as e:
+        raise ValueError("Impossible de lire ce fichier Excel. Enregistrez-le sous le format .CSV depuis Excel puis réessayez.")
 
-# 4. TABLEAU DE BORD ET ANALYSES
-elif menu == "Tableau de bord / Analyses":
-    st.header("📈 Synthèse et Analyse des Données ELGET SARL")
-    
-    df_carb = charger_donnees("carburant")
-    df_insp = charger_donnees("inspections")
-    
-    tab1, tab2 = st.tabs(["Analyse Carburant", "Analyse Maintenance & Pneus"])
-    
-    with tab1:
-        if not df_carb.empty:
-            st.metric("Total Litres Consommés", f"{df_carb['litres'].sum():,.2f} L")
-            st.metric("Coût Total Carburant", f"${df_carb['cout_total'].sum():,.2f}")
-            
-            st.subheader("Consommation par Véhicule")
-            chart_carb = df_carb.groupby("vehicule")["litres"].sum()
-            st.bar_chart(chart_carb)
-        else:
-            st.info("Aucune donnée de carburant enregistrée.")
+# --- ENTÊTE APPLICATION ---
+st.markdown("""
+    <div class="brand-header">
+        <h1>🚛 ELGET SARL — GESTION DE FLOTTE & ANALYSE DE FICHIERS EXCEL</h1>
+        <p>Analyse automatique et chargement universel sans erreur d'importation</p>
+    </div>
+""", unsafe_allow_html=True)
 
-    with tab2:
-        if not df_insp.empty:
-            st.metric("Nombre total d'inspections", len(df_insp))
-            
-            st.subheader("Répartition des États Général")
-            st.bar_chart(df_insp["etat_general"].value_counts())
-        else:
-            st.info("Aucune donnée d'inspection enregistrée.")
+# --- APPLICATION PRINCIPALE ---
+st.subheader("📂 Chargement & Analyse des Fichiers Excel / CSV")
+
+file = st.file_uploader("Déposez votre fichier Excel (.xlsx, .xls) ou CSV (.csv) :", type=["xlsx", "xls", "csv"])
+
+if file is not None:
+    try:
+        df = lire_fichier_universel(file)
+        st.success(f"✅ Fichier **{file.name}** chargé avec succès ! ({len(df)} lignes, {len(df.columns)} colonnes)")
+        
+        # Aperçu interactif
+        st.markdown("### 📋 Aperçu des Données")
+        st.dataframe(df, use_container_width=True)
+        
+        st.markdown("---")
+        st.markdown("### 📊 Analyses Automatiques")
+        
+        col_num = df.select_dtypes(include=['float64', 'int64', 'float', 'int']).columns.tolist()
+        col_cat = df.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        c1, c2 = st.columns(2)
+        
+        with c1:
+            st.write("**📈 Statistiques Récapitulatives**")
+            if col_num:
+                st.dataframe(df[col_num].describe().T)
+            else:
+                st.info("Aucune colonne numérique détectée.")
+                
+        with c2:
+            st.write("**📊 Graphique Interactif**")
+            if col_cat and col_num:
+                col_x = st.selectbox("Axe X (Catégorie / Élément) :", col_cat)
+                col_y = st.selectbox("Axe Y (Valeur numérique) :", col_num)
+                
+                df_grouped = df.groupby(col_x)[col_y].sum().reset_index()
+                st.bar_chart(df_grouped, x=col_x, y=col_y)
+            elif col_num:
+                col_y = st.selectbox("Sélectionnez la colonne à afficher :", col_num)
+                st.line_chart(df[col_y])
+            else:
+                st.info("Données insuffisantes pour générer un graphique.")
+
+    except Exception as err:
+        st.error(f"❌ Erreur lors de la lecture du fichier : {err}")
+        st.info("💡 Astuce : Si le problème persiste, ouvrez le fichier dans Excel et faites **Fichier > Enregistrer sous > CSV (séparé par des virgules) (.csv)**.")
