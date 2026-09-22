@@ -16,9 +16,9 @@ st.markdown("""
     .sub-header { font-size:18px; font-weight:bold; color:#1E40AF; margin-top:15px; }
     .card { background-color:#F3F4F6; padding:15px; border-radius:10px; margin-bottom:10px; }
     </style>
-""", unsafe_allow_allow_html=True)
+""", unsafe_allow_html=True)
 
-# --- INITIALISATION DE LA SESSION (STOCKAGE TEMPORAIRE) ---
+# --- INITIALISATION DE LA SESSION ---
 if 'inspections_camion' not in st.session_state:
     st.session_state.inspections_camion = []
 if 'ravitaillements' not in st.session_state:
@@ -58,7 +58,7 @@ if menu == "📊 Tableau de Bord":
     col3.metric("Volume Carburant Total", f"{volume_total:.1f} L")
     
     avg_cons = [r.get('conso_100km', 0) for r in st.session_state.ravitaillements if r.get('conso_100km', 0) > 0]
-    moyenne_flotte = sum(avg_cons)/len(avg_cons) if avg_cons else 0
+    moyenne_flotte = sum(avg_cons) / len(avg_cons) if avg_cons else 0
     col4.metric("Conso. Moyenne Flotte", f"{moyenne_flotte:.1f} L/100km")
 
     st.markdown("---")
@@ -168,10 +168,11 @@ elif menu == "⛽ Suivi du Carburant":
 
     with st.form("form_carburant"):
         st.subheader("1. Informations de Ravitaillement")
-        c1, c2, c3 = st.columns(3)
-        date_heure = c1.datetime_input("Date / Heure", datetime.datetime.now())
-        immat = c2.text_input("N° Immatriculation / Parc")
-        chauffeur = c3.text_input("Nom du Chauffeur")
+        c1, c2, c3, c4 = st.columns(4)
+        date_ravit = c1.date_input("Date", datetime.date.today())
+        heure_ravit = c2.time_input("Heure", datetime.datetime.now().time())
+        immat = c3.text_input("N° Immatriculation / Parc")
+        chauffeur = c4.text_input("Nom du Chauffeur")
         
         station = st.text_input("Station / Mode de Plein")
 
@@ -181,7 +182,7 @@ elif menu == "⛽ Suivi du Carburant":
         r1, r2, r3, r4, r5 = st.columns(5)
         km_prec = r1.number_input("Index / Km Précédent", min_value=0.0, step=1.0)
         km_act = r2.number_input("Index / Km Actuel", min_value=0.0, step=1.0)
-        volume = r3.number_input("Volume Ajouté (Liters)", min_value=0.0, step=0.1)
+        volume = r3.number_input("Volume Ajouté (Litres)", min_value=0.0, step=0.1)
         jauge = r4.number_input("Niveau Jauge (%)", min_value=0, max_value=100, value=100)
         num_bon = r5.text_input("N° Bon / Carte")
 
@@ -214,7 +215,7 @@ elif menu == "⛽ Suivi du Carburant":
             """, unsafe_allow_html=True)
 
             nouveau_plein = {
-                "date": str(date_heure),
+                "date": f"{date_ravit} {heure_ravit.strftime('%H:%M')}",
                 "immat": immat,
                 "chauffeur": chauffeur,
                 "station": station,
