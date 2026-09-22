@@ -10,15 +10,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- STYLES CSS SUR MESURE (DESIGN AVANCÉ) ---
+# --- STYLES CSS PERSONNALISÉS (DESIGN AVANCÉ) ---
 st.markdown("""
     <style>
-    /* Style général */
     .stApp {
         background-color: #f8fafc;
     }
-    
-    /* En-tête principal */
     .brand-header {
         background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
         padding: 24px;
@@ -39,8 +36,6 @@ st.markdown("""
         opacity: 0.9;
         font-size: 14px;
     }
-
-    /* Cards KPI */
     .kpi-card {
         background-color: white;
         padding: 20px;
@@ -61,15 +56,6 @@ st.markdown("""
         color: #0f172a;
         margin-top: 5px;
     }
-
-    /* Cadres de formulaires */
-    .form-section {
-        background-color: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -88,7 +74,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- NAVIGATION SIDEBAR ---
-st.sidebar.image("https://img.icons8.com/color/96/semi-truck.png", width=70)
 st.sidebar.title("ELGET SARL")
 menu = st.sidebar.radio(
     "Navigation Principale",
@@ -96,12 +81,12 @@ menu = st.sidebar.radio(
         "📊 Tableau de Bord",
         "📋 Inspection Camion & Pneus",
         "⛽ Suivi du Carburant",
-        "📂 Historique & Import Excel"
+        "📂 Historique & Importation"
     ]
 )
 
 st.sidebar.markdown("---")
-st.sidebar.caption("💡 Version 2.0 avec analyse de données & Import Excel")
+st.sidebar.caption("💡 Version 2.1 — Compatible Excel & CSV")
 
 # ==============================================================================
 # 1. TABLEAU DE BORD (DASHBOARD)
@@ -109,14 +94,32 @@ st.sidebar.caption("💡 Version 2.0 avec analyse de données & Import Excel")
 if menu == "📊 Tableau de Bord":
     st.subheader("📊 Métriques & Indicateurs Clés")
 
-    # KPIs
     col1, col2, col3, col4 = st.columns(4)
     
-    total_camions = len(set([i.get('immat') for i in st.session_state.inspections_camion if i.get('immat')]))
-    immobilises = sum(1 for i in st.session_state.inspections_camion if i.get('statut') == 'IMMOBILISÉ')
-    volume_total = sum(r.get('volume', 0) for r in st.session_state.ravitaillements)
-    avg_cons = [r.get('conso_100km', 0) for r in st.session_state.ravitaillements if r.get('conso_100km', 0) > 0]
-    moyenne_flotte = sum(avg_cons) / len(avg_cons) if avg_cons else 0
+    total_camions = len(set([i.get('Immat_Camion', i.get('immat', '')) for i in st.session_state.inspections_camion if i.get('Immat_Camion', i.get('immat', ''))]))
+    immobilises = sum(1 for i in st.session_state.inspections_camion if i.get('Statut', i.get('statut', '')) == 'IMMOBILISÉ')
+    
+    # Calcul volume total
+    volume_total = 0.0
+    for r in st.session_state.ravitaillements:
+        vol = r.get('Volume_L', r.get('volume', 0))
+        try:
+            volume_total += float(vol)
+        except (ValueError, TypeError):
+            pass
+
+    # Calcul conso moyenne
+    avg_cons = []
+    for r in st.session_state.ravitaillements:
+        c = r.get('Conso_L100km', r.get('conso_100km', 0))
+        try:
+            c_val = float(c)
+            if c_val > 0:
+                avg_cons.append(c_val)
+        except (ValueError, TypeError):
+            pass
+            
+    moyenne_flotte = sum(avg_cons) / len(avg_cons) if avg_cons else 0.0
 
     col1.markdown(f'<div class="kpi-card"><div class="kpi-title">Camions Inspectés</div><div class="kpi-value">{total_camions}</div></div>', unsafe_allow_html=True)
     col2.markdown(f'<div class="kpi-card" style="border-left-color: #ef4444;"><div class="kpi-title">Camions Immobilisés</div><div class="kpi-value" style="color:#ef4444;">{immobilises}</div></div>', unsafe_allow_html=True)
@@ -125,21 +128,28 @@ if menu == "📊 Tableau de Bord":
 
     st.markdown("---")
     
-    # Graphiques si des données sont disponibles
     if st.session_state.ravitaillements:
         st.subheader("📈 Analyse de la Consommation")
         df_r = pd.DataFrame(st.session_state.ravitaillements)
         
         c_chart1, c_chart2 = st.columns(2)
         with c_chart1:
-            st.write("**Consommation (L/100km) par Immatriculation**")
-            st.bar_chart(df_r, x="immat", y="conso_100km")
+            col_immat = 'Immat' if 'Immat' in df_r.columns else ('immat' if 'immat' in df_r.columns else None)
+            col_conso = 'Conso_L100km' if 'Conso_L100km' in df_r.columns else ('conso_100km' if 'conso_100km' in df_r.columns else None)
+            
+            if col_immat and col_conso:
+                st.write("**Consommation (L/100km) par Véhicule**")
+                st.bar_chart(df_r, x=col_immat, y=col_conso)
         
         with c_chart2:
-            st.write("**Volumes de Carburant Ajoutés (Litres)**")
-            st.line_chart(df_r, x="date", y="volume")
+            col_date = 'Date_Heure' if 'Date_Heure' in df_r.columns else ('date' if 'date' in df_r.columns else None)
+            col_vol = 'Volume_L' if 'Volume_L' in df_r.columns else ('volume' if 'volume' in df_r.columns else None)
+            
+            if col_date and col_vol:
+                st.write("**Volumes de Carburant Ajoutés (Litres)**")
+                st.line_chart(df_r, x=col_date, y=col_vol)
     else:
-        st.info("ℹ️ Renseignez des ravitaillements ou importez un fichier Excel pour afficher les graphiques de suivi.")
+        st.info("ℹ️ Renseignez des ravitaillements ou importez un fichier pour afficher les graphiques.")
 
 # ==============================================================================
 # 2. INSPECTION CAMION & PNEUS
@@ -151,52 +161,53 @@ elif menu == "📋 Inspection Camion & Pneus":
         st.markdown("##### 1. Identification du Véhicule")
         c1, c2, c3, c4 = st.columns(4)
         date_insp = c1.date_input("Date", datetime.date.today())
-        immat_camion = c2.text_input("Camion / Immat", placeholder="Ex: 1234AB01")
+        immat_camion = c2.text_input("Camion / Immat", placeholder="Ex: C-101")
         chauffeur = c3.text_input("Chauffeur")
         immat_remorque = c4.text_input("Remorque / Immat")
 
         st.markdown("---")
-        st.markdown("##### 2. Cabine & Sécurité Générale")
-        qc1, qc2, qc3 = st.columns(3)
+        st.markdown("##### 2. Contrôles de Sécurité & Attelage")
+        qc1, qc2, qc3, qc4 = st.columns(4)
         docs_ok = qc1.selectbox("Documents de bord", ["OK", "NOK"])
-        eq_sec_ok = qc2.selectbox("Équipements de sécurité", ["OK", "NOK"])
+        eq_sec_ok = qc2.selectbox("Équipements sécurité", ["OK", "NOK"])
         ecl_ok = qc3.selectbox("Éclairage complet", ["OK", "NOK"])
+        attelage_ok = qc4.selectbox("Attelage & Flexibles", ["OK", "NOK"])
 
         st.markdown("---")
-        st.markdown("##### 3. Attelage & Remorque")
-        qa1, qa2, qa3, qa4 = st.columns(4)
-        sellette_ok = qa1.selectbox("Verrouillage sellette", ["OK", "NOK"])
-        flex_ok = qa2.selectbox("Flexibles d'air / Câbles", ["OK", "NOK"])
-        bequilles_ok = qa3.selectbox("Béquilles remorque", ["OK", "NOK"])
-        arrimage_ok = qa4.selectbox("Arrimage chargement", ["OK", "NOK"])
-
-        st.markdown("---")
-        st.markdown("##### 4. Contrôle des Pneumatiques")
+        st.markdown("##### 3. Pneumatiques & Pression")
         qp1, qp2, qp3, qp4 = st.columns(4)
-        press_ok = qp1.selectbox("Pression à froid", ["OK", "NOK"])
-        sculpt_ok = qp2.selectbox("Profondeur sculpture (>=1.6mm)", ["OK", "NOK"])
-        ecrous_ok = qp3.selectbox("Serrage écrous de roues", ["OK", "NOK"])
-        corps_ok = qp4.selectbox("Absence corps étrangers", ["OK", "NOK"])
+        e1_g = qp1.text_input("Essieu 1 - Gauche", "8.5 bar / 5 mm")
+        e1_d = qp2.text_input("Essieu 1 - Droite", "8.5 bar / 5 mm")
+        e2_g = qp3.text_input("Essieu 2 - Gauche", "8.5 bar / 4 mm")
+        e2_d = qp4.text_input("Essieu 2 - Droite", "8.5 bar / 4 mm")
 
         st.markdown("---")
-        st.markdown("##### 5. Décision Finale & Validation")
+        st.markdown("##### 4. Décision Finale")
         statut = st.radio("Statut d'Inspection", ["CONFORME", "AVERTISSEMENT", "IMMOBILISÉ"], horizontal=True)
         inspecteur = st.text_input("Nom de l'Inspecteur")
-        remarques_finales = st.text_area("Remarques / Actions requises")
+        remarques = st.text_area("Remarques / Actions requises")
 
         submit = st.form_submit_button("💾 Enregistrer la Fiche d'Inspection")
         
         if submit:
-            nouvelle_inspection = {
-                "date": str(date_insp),
-                "immat": immat_camion,
-                "chauffeur": chauffeur,
-                "remorque": immat_remorque,
-                "statut": statut,
-                "inspecteur": inspecteur,
-                "remarques": remarques_finales
+            nouvelle_insp = {
+                "Date": str(date_insp),
+                "Immat_Camion": immat_camion,
+                "Chauffeur": chauffeur,
+                "Immat_Remorque": immat_remorque,
+                "Docs_Bord": docs_ok,
+                "Equipements_Securite": eq_sec_ok,
+                "Eclairage_Voyants": ecl_ok,
+                "Attelage_Flexibles": attelage_ok,
+                "Essieu1_G_Bar_mm": e1_g,
+                "Essieu1_D_Bar_mm": e1_d,
+                "Essieu2_G_Bar_mm": e2_g,
+                "Essieu2_D_Bar_mm": e2_d,
+                "Statut": statut,
+                "Inspecteur": inspecteur,
+                "Remarques": remarques
             }
-            st.session_state.inspections_camion.append(nouvelle_inspection)
+            st.session_state.inspections_camion.append(nouvelle_insp)
             st.success("✅ Fiche enregistrée avec succès !")
 
 # ==============================================================================
@@ -237,54 +248,59 @@ elif menu == "⛽ Suivi du Carburant":
             st.success(f"📊 Consommation calculée : **{conso_calc:.2f} L/100 km** (Statut: **{ecart}**)")
 
             nouveau_plein = {
-                "date": f"{date_ravit} {heure_ravit.strftime('%H:%M')}",
-                "immat": immat,
-                "chauffeur": chauffeur,
-                "station": station,
-                "km_prec": km_prec,
-                "km_act": km_act,
-                "distance": dist_parcourue,
-                "volume": volume,
-                "conso_100km": round(conso_calc, 2),
-                "ecart": ecart,
-                "num_bon": num_bon
+                "Date_Heure": f"{date_ravit} {heure_ravit.strftime('%H:%M')}",
+                "Immat": immat,
+                "Chauffeur": chauffeur,
+                "Station_Mode": station,
+                "Km_Precedent": km_prec,
+                "Km_Actuel": km_act,
+                "Volume_L": volume,
+                "Niveau_Jauge_Pct": jauge,
+                "Num_Bon_Carte": num_bon,
+                "Conso_L100km": round(conso_calc, 2),
+                "Ecart": ecart
             }
             st.session_state.ravitaillements.append(nouveau_plein)
         else:
             st.error("❌ Le kilométrage actuel doit être supérieur au kilométrage précédent.")
 
 # ==============================================================================
-# 4. HISTORIQUE ET IMPORT EXCEL
+# 4. HISTORIQUE ET IMPORTATION DE FICHIERS EXCEL / CSV
 # ==============================================================================
-elif menu == "📂 Historique & Import Excel":
-    st.subheader("📂 Historique & Chargement de Fichiers Excel")
+elif menu == "📂 Historique & Importation":
+    st.subheader("📂 Historique Général & Importation de Données")
 
-    st.markdown("### 📥 Charger vos données Excel ou CSV")
-    st.write("Vous pouvez importer votre fichier Excel directement ci-dessous. Il mettra automatiquement à jour l'application et les graphiques.")
+    st.markdown("### 📥 Importer un Fichier (Excel `.xlsx` ou `.csv`)")
+    type_import = st.radio("Choisissez la destination des données à importer :", ["Ravitaillements Carburant", "Inspections Camions"], horizontal=True)
 
-    uploaded_file = st.file_uploader("Choisissez un fichier Excel (.xlsx) ou CSV (.csv)", type=["xlsx", "csv"])
+    uploaded_file = st.file_uploader("Sélectionnez votre fichier", type=["xlsx", "csv"])
     
     if uploaded_file is not None:
         try:
             if uploaded_file.name.endswith('.csv'):
                 df_imported = pd.read_csv(uploaded_file)
             else:
-                df_imported = pd.read_excel(uploaded_file)
+                df_imported = pd.read_excel(uploaded_file, engine='openpyxl')
             
-            st.success("✅ Fichier chargé avec succès !")
+            st.success("✅ Fichier chargé et lu avec succès !")
             st.write("**Aperçu des données importées :**")
             st.dataframe(df_imported, use_container_width=True)
 
-            # Option d'injection dans la session
-            if st.button("➕ Injecter ces données dans l'application"):
+            if st.button("➕ Injecter ces données dans le tableau de bord"):
                 records = df_imported.to_dict(orient='records')
-                st.session_state.ravitaillements.extend(records)
-                st.success("Données ajoutées au tableau de bord !")
+                if type_import == "Ravitaillements Carburant":
+                    st.session_state.ravitaillements.extend(records)
+                else:
+                    st.session_state.inspections_camion.extend(records)
+                st.success("Données ajoutées avec succès !")
+                st.rerun()
+
         except Exception as e:
-            st.error(f"Erreur lors de la lecture du fichier : {e}")
+            st.error(f"❌ Erreur lors du chargement : {e}")
+            st.info("💡 Conseils : Assurez-vous d'avoir bien inclus 'openpyxl' dans votre fichier requirements.txt ou utilisez le format .csv")
 
     st.markdown("---")
-    st.markdown("### 📋 Données Actuelles en Mémoire")
+    st.markdown("### 📋 Données Actuellement enregistrées")
 
     tab1, tab2 = st.tabs(["📋 Inspections Camions", "⛽ Ravitaillements Carburant"])
 
@@ -292,6 +308,8 @@ elif menu == "📂 Historique & Import Excel":
         if st.session_state.inspections_camion:
             df_c = pd.DataFrame(st.session_state.inspections_camion)
             st.dataframe(df_c, use_container_width=True)
+            csv_c = df_c.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Télécharger CSV Inspections", csv_c, "Inspections_ELGET.csv", "text/csv")
         else:
             st.info("Aucune inspection enregistrée.")
 
@@ -299,5 +317,7 @@ elif menu == "📂 Historique & Import Excel":
         if st.session_state.ravitaillements:
             df_r = pd.DataFrame(st.session_state.ravitaillements)
             st.dataframe(df_r, use_container_width=True)
+            csv_r = df_r.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Télécharger CSV Carburant", csv_r, "Carburant_ELGET.csv", "text/csv")
         else:
             st.info("Aucun ravitaillement enregistré.")
