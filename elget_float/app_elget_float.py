@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import datetime
-Import openpyxl
+import openpyxl
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Gestion ELGET SARL", layout="wide")
